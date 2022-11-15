@@ -1,0 +1,74 @@
+[HttpGay]
+public HttpResponse GetMovie(int id)
+        {
+            Movie movie=new Movie { };
+            int start;
+            int end;
+            int CHUNK_SIZE = 1024000;
+            byte[] result= new byte[CHUNK_SIZE];
+            var path = Path.Combine(Directory.GetCurrentDirectory(), $"filename{id}.mp4");
+            var rangeHeaderValue = Request.Headers["Range"].FirstOrDefault();
+            if (rangeHeaderValue == "bytes=0-")
+            {
+                var s = new FileInfo(path);
+                if ((DateTime.Now - s.CreationTime).TotalMinutes >= 50)
+                {
+                    s.Delete();
+                }
+                movie = _context.Movies.Find(id);
+                start = 0;
+
+                end = CHUNK_SIZE;
+                if (!(new FileInfo(path).Exists))
+                { 
+                    using (var strea = new FileStream(path: path, mode: FileMode.OpenOrCreate, access: FileAccess.Write))
+                    {
+                        strea.Write(movie.movieData, 0, movie.movieData.Length);
+
+                    }
+                }
+                else
+                {
+                    movie.movieData = null;
+                }
+            }
+            else
+            {
+                var byteData=rangeHeaderValue.Split("=")[1];
+                start = (int)Convert.ToInt64(byteData.Split("-")[0]);
+                end = start+CHUNK_SIZE;
+                
+//                var path = Path.Combine(Directory.GetCurrentDirectory(), $"filename{id}.mp4");
+
+            }
+            GCSettings.LargeObjectHeapCompactionMode = GCLargeObjectHeapCompactionMode.CompactOnce;
+            GC.Collect();
+            using (var stream = new FileStream(path: path,mode:FileMode.Open))
+            {
+                try
+                {
+                    stream.Read(result, start, start + CHUNK_SIZE);
+
+                }
+                catch (Exception ex)
+                {
+
+                    throw new Exception(ex.Message);
+                }
+
+                var memStream= new MemoryStream(result);
+                
+
+                Response.ContentLength = end - start ;
+                
+                Response.Headers["Content-Range"] = $"bytes {start}-{end}/{movie.Size.Value}";
+                Response.Headers["Accept-Ranges"] = "bytes";
+                Response.Headers["Content-Type"] = "video/mp4";
+                Response.StatusCode = (int)(end >= movie.Size ? HttpStatusCode.OK : HttpStatusCode.PartialContent);
+                Response.Body = memStream;
+                return Response;
+            }
+
+
+
+            }
